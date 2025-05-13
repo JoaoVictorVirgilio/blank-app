@@ -67,9 +67,12 @@ for i, col in enumerate(cols):
         if i < len(st.session_state.chargers):
             ch = st.session_state.chargers[i]
             st.markdown(f"### ⚡ Vaga {i+1}")
-            st.markdown(f"**Morador:** {ch['resident']}  
-            **Carro:** {ch['car']} {ch['model']}  
-            **Conector:** {ch['connector']}")
+            info_md = f"""
+**Morador:** {ch['resident']}  
+**Carro:** {ch['car']} {ch['model']}  
+**Conector:** {ch['connector']}
+"""
+            st.markdown(info_md)
             st.progress(int(ch['level']*100))
             st.markdown(f"**Custo:** R$ {ch['cost']:.2f}")
             if st.button("🗑 Remover", key=f"rem{i}"):
