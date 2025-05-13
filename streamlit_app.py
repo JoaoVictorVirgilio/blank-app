@@ -33,19 +33,24 @@ if st.button("Avançar 1 hora"):
     st.session_state.sim_time += timedelta(hours=1)
     for ch in st.session_state.chargers:
         prev = ch['level']
-        # taxa fixa de 10% por hora
         new_level = min(1.0, prev + 0.10)
         delta = new_level - prev
         ch['level'] = new_level
-        # custo: energia desenhada = capacidade * delta / eficiência
         energy_drawn = ch['capacity'] * delta / ch['eff']
         ch['cost'] += energy_drawn * ch['cost_kwh']
 
 # Alocação de carro
 st.header("Alocar Carro")
-sel = st.selectbox("Escolha o Morador", [None] + list(dorms.keys()))
+options = ["Adicionar Morador"] + list(dorms.keys())
+sel = st.selectbox("Escolha o Morador", options, key='sel')
 if st.button("Alocar"):
-    if sel and len(st.session_state.chargers) < 5:
+    if sel == "Adicionar Morador":
+        st.warning("Por favor, selecione um morador válido.")
+    elif any(ch['resident'] == sel for ch in st.session_state.chargers):
+        st.warning(f"{sel} já está carregando em outra estação.")
+    elif len(st.session_state.chargers) >= 5:
+        st.warning("Todas as estações estão ocupadas.")
+    else:
         info = dorms[sel]
         st.session_state.chargers.append({
             'resident': sel,
@@ -58,8 +63,6 @@ if st.button("Alocar"):
             'cost_kwh': info['cost_kwh'],
             'cost': 0
         })
-    else:
-        st.warning("Selecione um morador e verifique vagas disponíveis.")
 
 # Visualização das vagas
 st.header("Estações")
@@ -68,7 +71,7 @@ for i in range(5):
     with cols[i]:
         if i < len(st.session_state.chargers):
             ch = st.session_state.chargers[i]
-            st.subheader(f"Vaga {i+1}")
+            st.subheader(f"🔌 Vaga {i+1}")
             st.write(f"{ch['resident']} - {ch['car']}")
             st.progress(int(ch['level']*100))
             st.write(f"Custo acumulado: R$ {ch['cost']:.2f}")
@@ -78,7 +81,7 @@ for i in range(5):
                 st.session_state.history.append(rec)
                 st.session_state.chargers.pop(i)
         else:
-            st.subheader(f"Vaga {i+1} (Livre)")
+            st.subheader(f"🔌 Vaga {i+1} (Livre)")
 
 # Histórico
 st.header("Histórico de Cargas")
