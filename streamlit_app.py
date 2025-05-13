@@ -1,98 +1,90 @@
 import streamlit as st
 from datetime import datetime, timedelta
 
-# Configuração de moradores predefinidos
+# Configuração de 10 moradores com dados fixos
 dorms = {
-    "Morador 1": {"car": "ABC1234", "model": "Tesla Model 3", "connector": "CCS", "level": 20},
-    "Morador 2": {"car": "XYZ5678", "model": "Nissan Leaf", "connector": "Tipo 2", "level": 50},
-    "Morador 3": {"car": "DEF9012", "model": "Chevrolet Bolt", "connector": "CCS", "level": 30},
+    "Morador 1":  {"car": "Tesla",    "model": "Model 3",      "connector": "Tipo 2",   "level": 0.15, "capacity": 75, "eff": 0.90, "cost_kwh": 0.71},
+    "Morador 2":  {"car": "Volkswagen","model": "ID.4",         "connector": "CCS Combo", "level": 0.77, "capacity": 70, "eff": 0.86, "cost_kwh": 0.71},
+    "Morador 3":  {"car": "Hyundai",   "model": "Kona Electric", "connector": "Tipo 1",   "level": 0.98, "capacity": 60, "eff": 0.94, "cost_kwh": 0.71},
+    "Morador 4":  {"car": "Tesla",    "model": "Model 3",      "connector": "CHAdeMO",   "level": 0.71, "capacity": 40, "eff": 0.87, "cost_kwh": 0.71},
+    "Morador 5":  {"car": "Mercedes", "model": "EQC",           "connector": "Tipo 2",   "level": 0.99, "capacity": 40, "eff": 0.89, "cost_kwh": 0.71},
+    "Morador 6":  {"car": "Tesla",    "model": "Model Y",      "connector": "CHAdeMO",   "level": 0.45, "capacity": 60, "eff": 0.90, "cost_kwh": 0.71},
+    "Morador 7":  {"car": "Porsche",  "model": "Taycan",        "connector": "CHAdeMO",   "level": 0.65, "capacity": 40, "eff": 0.88, "cost_kwh": 0.71},
+    "Morador 8":  {"car": "Mercedes", "model": "EQC",           "connector": "CCS Combo", "level": 0.78, "capacity": 80, "eff": 0.85, "cost_kwh": 0.71},
+    "Morador 9":  {"car": "Renault",  "model": "Zoe",           "connector": "Tipo 1",   "level": 0.10, "capacity": 60, "eff": 0.92, "cost_kwh": 0.71},
+    "Morador 10": {"car": "Tesla",    "model": "Model Y",      "connector": "CCS Combo", "level": 0.48, "capacity": 90, "eff": 0.86, "cost_kwh": 0.71},
 }
 
 # Inicializa sessões
 if 'chargers' not in st.session_state:
-    st.session_state.chargers = []  # carros em carregamento
+    st.session_state.chargers = []  # estações ocupadas
 if 'history' not in st.session_state:
-    st.session_state.history = []  # carros removidos
+    st.session_state.history = []   # registros concluídos
 if 'sim_time' not in st.session_state:
-    # Inicia simulação hoje às 07:00
     today = datetime.now().date()
     st.session_state.sim_time = datetime.combine(today, datetime.min.time()).replace(hour=7)
 
-st.title("Sistema Simplificado - 5 Estações")
+st.title("Sistema de Carregadores - 5 Estações")
 
 # Controle de tempo
 st.subheader("Tempo de Simulação")
 st.write(st.session_state.sim_time.strftime('%d/%m/%Y %H:%M'))
-if st.button("Avançar 1 hora", key='advance'):
+if st.button("Avançar 1 hora"):
     st.session_state.sim_time += timedelta(hours=1)
-    # Atualiza nível e custo de cada carro
     for ch in st.session_state.chargers:
-        # taxa de carga (% por hora)
-        rate = ch.get('rate', 10)
-        prev_level = ch['level']
-        ch['level'] = min(100, prev_level + rate)
-        # custo por %
-        cost_per_percent = st.sidebar.number_input("Custo por % de carga", min_value=0.0, value=2.0, step=0.5, key='costp')
-        ch['cost'] = ch.get('cost', 0) + (ch['level'] - prev_level) * cost_per_percent
+        prev = ch['level']
+        # taxa fixa de 10% por hora
+        new_level = min(1.0, prev + 0.10)
+        delta = new_level - prev
+        ch['level'] = new_level
+        # custo: energia desenhada = capacidade * delta / eficiência
+        energy_drawn = ch['capacity'] * delta / ch['eff']
+        ch['cost'] += energy_drawn * ch['cost_kwh']
 
-# Formulário de alocação
-st.header("Adicionar Carro")
-resident = st.selectbox("Morador", [None] + list(dorms.keys()), key='res')
-if resident:
-    info = dorms[resident]
-    car = info['car']
-    model = info['model']
-    connector = info['connector']
-    level = info['level']
-else:
-    resident = st.text_input("Morador (novo)", key='res_text')
-    car = st.text_input("Placa/Carro", key='car')
-    model = st.text_input("Modelo", key='model')
-    connector = st.selectbox("Conector", ["Tipo 1","Tipo 2","CCS","CHAdeMO"], key='conn')
-    level = st.slider("Nível Inicial (%)", 0, 100, 20, key='level')
-
-if st.button("Alocar Carro", key='add'):
-    if len(st.session_state.chargers) < 5:
+# Alocação de carro
+st.header("Alocar Carro")
+sel = st.selectbox("Escolha o Morador", [None] + list(dorms.keys()))
+if st.button("Alocar"):
+    if sel and len(st.session_state.chargers) < 5:
+        info = dorms[sel]
         st.session_state.chargers.append({
-            'resident': resident,
-            'car': car,
-            'model': model,
-            'connector': connector,
-            'level': level,
-            'rate': 10,         # % por hora
+            'resident': sel,
+            'car': info['car'],
+            'model': info['model'],
+            'connector': info['connector'],
+            'level': info['level'],
+            'capacity': info['capacity'],
+            'eff': info['eff'],
+            'cost_kwh': info['cost_kwh'],
             'cost': 0
         })
     else:
-        st.warning("Todas as estações estão ocupadas.")
+        st.warning("Selecione um morador e verifique vagas disponíveis.")
 
-# Exibição das vagas
-st.header("Estações - Status")
+# Visualização das vagas
+st.header("Estações")
 cols = st.columns(5)
 for i in range(5):
     with cols[i]:
         if i < len(st.session_state.chargers):
             ch = st.session_state.chargers[i]
             st.subheader(f"Vaga {i+1}")
-            st.write(f"**Morador:** {ch['resident']}")
-            st.write(f"**Carro:** {ch['car']}")
-            st.write(f"**Modelo:** {ch['model']}")
-            st.write(f"**Conector:** {ch['connector']}")
-            st.progress(int(ch['level']))
-            st.write(f"Custo até agora: R$ {ch['cost']:.2f}")
-            if st.button("Remover", key=f"rem_{i}"):
-                # Registra e remove
-                record = ch.copy()
-                record['removed_at'] = st.session_state.sim_time
-                st.session_state.history.append(record)
+            st.write(f"{ch['resident']} - {ch['car']}")
+            st.progress(int(ch['level']*100))
+            st.write(f"Custo acumulado: R$ {ch['cost']:.2f}")
+            if st.button("Remover", key=f"rem{i}"):
+                rec = ch.copy()
+                rec['removed_at'] = st.session_state.sim_time
+                st.session_state.history.append(rec)
                 st.session_state.chargers.pop(i)
         else:
             st.subheader(f"Vaga {i+1} (Livre)")
 
-# Histórico de remoções
-st.header("Histórico de Remoções")
+# Histórico
+st.header("Histórico de Cargas")
 if st.session_state.history:
     for h in st.session_state.history:
-        sim_time = h['removed_at'].strftime('%d/%m %H:%M')
-        st.write(f"{h['resident']} - {h['car']} | Removido às {sim_time} | Custo total: R$ {h['cost']:.2f}")
+        time = h['removed_at'].strftime('%d/%m %H:%M')
+        st.write(f"{h['resident']} | Custo total: R$ {h['cost']:.2f} | Removido: {time}")
 else:
-    st.write("Nenhum carro removido ainda.")
+    st.write("Nenhuma carga concluída ainda.")
