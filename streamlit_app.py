@@ -1,120 +1,106 @@
 import streamlit as st
 from datetime import datetime, timedelta
 
-# Initialize session state
+# Configuração de moradores predefinidos
+dorms = {
+    "Morador 1": {"car": "ABC1234", "model": "Tesla Model 3", "connector": "CCS", "initial_level": 20},
+    "Morador 2": {"car": "XYZ5678", "model": "Nissan Leaf", "connector": "Tipo 2", "initial_level": 50},
+    "Morador 3": {"car": "DEF9012", "model": "Chevrolet Bolt", "connector": "CCS", "initial_level": 30},
+    # Adicione quantos moradores quiser aqui
+}
+
+# Inicializa estados da sessão
 if 'chargers' not in st.session_state:
-    st.session_state.chargers = []  # active chargers
-if 'waiting_list' not in st.session_state:
-    st.session_state.waiting_list = []  # queued cars
+    st.session_state.chargers = []  # lista de estações ocupadas
 if 'history' not in st.session_state:
-    st.session_state.history = []  # completed charges
+    st.session_state.history = []
 
-st.title("Sistema de Gerenciamento de Carregamento de Veículos Elétricos")
+# Título
+title = "Sistema de Carregamento - 5 Estações"
+st.title(title)
 
-# Simulation time input
-sim_time = st.sidebar.time_input("Horário de Simulação", value=datetime.now().time())
-sim_datetime = datetime.combine(datetime.today(), sim_time)
+# Controle de horário da simulação (apenas avanço)
+if 'sim_time' not in st.session_state:
+    st.session_state.sim_time = datetime.now()
+new_time = st.sidebar.datetime_input("Horário da Simulação", value=st.session_state.sim_time)
+# Garantir só avanço
+if new_time >= st.session_state.sim_time:
+    st.session_state.sim_time = new_time
+current_time = st.session_state.sim_time
 
-# Car details input
-st.header("Adicionar Novo Carro")
-resident = st.text_input("Morador", key="resident")
-car = st.text_input("Placa/Carro", key="car")
-model = st.text_input("Modelo", key="model")
-connector = st.selectbox("Tipo de Conector", ["Tipo 1", "Tipo 2", "CCS", "CHAdeMO"], key="connector")
-level = st.slider("Nível Atual da Bateria (%)", 0, 100, 20, key="level")
+# Função para atualizar níveis e mover carros completos para histórico
+def update_chargers():
+    updated = []
+    for ch in st.session_state.chargers:
+        hours_passed = (current_time - ch['start_time']).total_seconds() / 3600
+        level = min(ch['initial_level'] + hours_passed * ch['rate'], 100)
+        ch['current_level'] = level
+        if level >= 100 and not ch['auto_removal']:
+            ch['complete'] = True
+        updated.append(ch)
+    st.session_state.chargers = updated
 
-if st.button("Adicionar Carro"):
-    # Before adding, update removals
-    def update_chargers(current_time):
-        to_remove = []
-        for ch in st.session_state.chargers:
-            # assume rate 1% por hora
-            hours_needed = (100 - ch['level']) / 1.0
-            full_time = ch['start_time'] + timedelta(hours=hours_needed)
-            if full_time <= current_time:
-                to_remove.append(ch)
-        for ch in to_remove:
-            st.session_state.chargers.remove(ch)
-            ch['end_time'] = ch['start_time'] + timedelta(hours=(100 - ch['level']))
-            ch['final_level'] = 100
-            st.session_state.history.append(ch)
-        # fill from waiting list
-        while len(st.session_state.chargers) < 3 and st.session_state.waiting_list:
-            next_car = st.session_state.waiting_list.pop(0)
-            next_car['start_time'] = current_time
-            next_car['level'] = next_car['level']
-            st.session_state.chargers.append(next_car)
+update_chargers()
 
-    update_chargers(sim_datetime)
-    # Add new car
-    if len(st.session_state.chargers) < 3:
-        new_ch = {
-            'resident': resident,
+# Formulário de nova entrada
+st.header("Adicionar Carro")
+resident = st.selectbox("Morador", [None] + list(dorms.keys()))
+if resident:
+    info = dorms[resident]
+    car = info['car']
+    model = info['model']
+    connector = info['connector']
+    initial_level = info['initial_level']
+else:
+    car = st.text_input("Placa/Carro")
+    model = st.text_input("Modelo")
+    connector = st.selectbox("Tipo de Conector", ["Tipo 1", "Tipo 2", "CCS", "CHAdeMO"])
+    initial_level = st.slider("Nível Inicial (%)", 0, 100, 20)
+
+if st.button("Alocar no Próximo Carregador"):
+    if len(st.session_state.chargers) < 5:
+        st.session_state.chargers.append({
+            'resident': resident or "-",
             'car': car,
             'model': model,
             'connector': connector,
-            'level': level,
-            'start_time': sim_datetime
-        }
-        st.session_state.chargers.append(new_ch)
-    else:
-        new_wait = {
-            'resident': resident,
-            'car': car,
-            'model': model,
-            'connector': connector,
-            'level': level,
-            'request_time': sim_datetime
-        }
-        st.session_state.waiting_list.append(new_wait)
-    st.experimental_rerun()
-
-# Display active chargers
-st.header("Estações de Carregamento Ativas")
-if st.session_state.chargers:
-    data = []
-    for idx, ch in enumerate(st.session_state.chargers, start=1):
-        # calculate estimated full time
-        hours_needed = (100 - ch['level']) / 1.0
-        full_time = ch['start_time'] + timedelta(hours=hours_needed)
-        data.append({
-            'Carregador': idx,
-            'Morador': ch['resident'],
-            'Carro': ch['car'],
-            'Modelo': ch['model'],
-            'Conector': ch['connector'],
-            'Nível Atual (%)': ch['level'],
-            'Início': ch['start_time'].strftime('%H:%M'),
-            'Previsão de Término': full_time.strftime('%H:%M')
+            'initial_level': initial_level,
+            'start_time': current_time,
+            'rate': 1.0,  # % por hora
+            'current_level': initial_level,
+            'auto_removal': False,
+            'complete': False
         })
-    st.table(data)
-else:
-    st.write("Nenhum carregamento em andamento.")
+    else:
+        st.warning("Todas as 5 estações estão ocupadas.")
 
-# Display waiting list
-st.header("Lista de Espera")
-if st.session_state.waiting_list:
-    st.table([{
-        'Posição': i+1,
-        'Morador': w['resident'],
-        'Carro': w['car'],
-        'Modelo': w['model'],
-        'Conector': w['connector'],
-        'Nível (%)': w['level'],
-        'Chegada': w['request_time'].strftime('%H:%M')
-    } for i, w in enumerate(st.session_state.waiting_list)])
-else:
-    st.write("Sem espera no momento.")
+# Exibição dos carregadores
+st.header("Estações de Carregamento (5)")
+cols = st.columns(5)
+for i in range(5):
+    with cols[i]:
+        if i < len(st.session_state.chargers):
+            ch = st.session_state.chargers[i]
+            st.subheader(f"Vaga {i+1}")
+            st.text(f"{ch['resident']}\n{ch['car']}\n{ch['model']}")
+            st.progress(int(ch['current_level']))
+            # Botão de remoção manual
+            if st.button(f"Remover Vaga {i+1}"):
+                st.session_state.history.append({
+                    **ch,
+                    'end_time': current_time
+                })
+                st.session_state.chargers.pop(i)
+                st.experimental_rerun()
+        else:
+            st.subheader(f"Vaga {i+1}\n(Disponível)")
 
-# Display history
-st.header("Histórico de Carregamentos Concluídos")
+# Histórico de carregamentos
+st.header("Histórico")
 if st.session_state.history:
-    st.table([{
-        'Morador': h['resident'],
-        'Carro': h['car'],
-        'Modelo': h['model'],
-        'Início': h['start_time'].strftime('%H:%M'),
-        'Término': h['end_time'].strftime('%H:%M')
-    } for h in st.session_state.history])
+    for h in st.session_state.history:
+        duration = (h['end_time'] - h['start_time']).total_seconds() / 3600
+        level = min(h['initial_level'] + duration * h['rate'], 100)
+        st.write(f"{h['resident']} - {h['car']} | Início: {h['start_time'].strftime('%d/%m %H:%M')} - Fim: {h['end_time'].strftime('%d/%m %H:%M')} | Nível: {int(level)}%")
 else:
-    st.write("Nenhum histórico ainda.")
+    st.write("Nenhum carregamento concluído ainda.")
