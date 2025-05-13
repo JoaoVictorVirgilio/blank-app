@@ -59,7 +59,7 @@ for i in range(5):
             if st.button("Remover", key=f"rem_{i}"):
                 st.session_state.history.append(ch)
                 st.session_state.chargers.pop(i)
-                st.experimental_rerun()
+                # Sem experimental_rerun: Streamlit atualiza automaticamente
         else:
             st.subheader(f"Vaga {i+1} (Livre)")
 
