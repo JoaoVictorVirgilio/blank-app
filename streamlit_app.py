@@ -21,6 +21,8 @@ def init_state():
         st.session_state.chargers = []
     if 'history' not in st.session_state:
         st.session_state.history = []
+    if 'queue' not in st.session_state:
+        st.session_state.queue = []  # lista de espera FIFO
     if 'sim_time' not in st.session_state:
         today = datetime.now().date()
         st.session_state.sim_time = datetime.combine(today, datetime.min.time()).replace(hour=7)
@@ -36,6 +38,7 @@ with st.sidebar:
     st.write(st.session_state.sim_time.strftime('%d/%m/%Y %H:%M'))
     if st.button("Avançar +1h"):
         st.session_state.sim_time += timedelta(hours=1)
+        # Atualiza carga e custo
         for ch in st.session_state.chargers:
             prev = ch['level']
             new = min(1.0, prev + 0.10)
@@ -53,11 +56,13 @@ if st.sidebar.button("Alocar"):
         st.sidebar.warning("Selecione um morador.")
     elif any(c['resident']==sel for c in st.session_state.chargers):
         st.sidebar.warning(f"{sel} já está em carga.")
-    elif len(st.session_state.chargers)>=3:
-        st.sidebar.warning("3 estações ocupadas.")
     else:
         info = dorms[sel]
-        st.session_state.chargers.append({**info, 'resident': sel, 'cost': 0})
+        entry = {**info, 'resident': sel, 'cost': 0, 'queued_at': st.session_state.sim_time}
+        if len(st.session_state.chargers) < 3:
+            st.session_state.chargers.append(entry)
+        else:
+            st.session_state.queue.append(entry)
 
 # Exibição das 3 vagas
 st.header("🔌 Estações de Carga")
@@ -79,9 +84,21 @@ for i, col in enumerate(cols):
                 rec = ch.copy()
                 rec['removed_at'] = st.session_state.sim_time
                 st.session_state.history.append(rec)
+                # Remove e aloca da fila
                 st.session_state.chargers.pop(i)
+                if st.session_state.queue:
+                    next_car = st.session_state.queue.pop(0)
+                    st.session_state.chargers.append(next_car)
         else:
             st.markdown(f"### 🔋 Vaga {i+1} (Livre)")
+
+# Fila de espera
+st.header("⏳ Fila de Espera")
+if st.session_state.queue:
+    for idx, q in enumerate(st.session_state.queue, 1):
+        st.write(f"{idx}. {q['resident']} | {q['car']} {q['model']} | Entrada: {q['queued_at'].strftime('%H:%M')}")
+else:
+    st.write("Nenhum na fila de espera.")
 
 # Histórico de cargas
 st.header("📜 Histórico")
